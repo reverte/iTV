@@ -3818,6 +3818,331 @@ case ACTION_SHOW_INFO:
 // reset rendering resolution
 g_graphicsContext.SetRenderingResolution(m_coordsRes, m_needsScaling);
 
+diff --git a/language/English/strings.po b/language/English/strings.po
+index c988859..20b4892 100644
+--- a/language/English/strings.po
++++ b/language/English/strings.po
+@@ -5114,6 +5114,22 @@ msgctxt "#13434"
+msgid "Play only this"
+msgstr ""
+
++msgctxt "#13445"
++msgid "3D Subtitles"
++msgstr ""
++
++msgctxt "#13446"
++msgid "3D Subtitles parallax"
++msgstr ""
++
++msgctxt "#13447"
++msgid "Side By Side"
++msgstr ""
++
++msgctxt "#13448"
++msgid "Under / Over"
++msgstr ""
++
+#empty strings from id 13435 to 13499
+
+msgctxt "#13500"
+@@ -10177,6 +10193,10 @@ msgctxt "#22024"
+msgid "Direct3D version:"
+msgstr ""
+
++msgctxt "#22025"
++msgid "%1.0f"
++msgstr ""
++
+#empty strings from id 22025 to 22029
+#strings 22030 thru 22060 reserved for karaoke
+
+diff --git a/system/keymaps/keyboard.xml b/system/keymaps/keyboard.xml
+index 4271157..c409f10 100644
+--- a/system/keymaps/keyboard.xml
++++ b/system/keymaps/keyboard.xml
+@@ -227,6 +227,7 @@
+<t>ShowSubtitles</t>
+<t mod="ctrl">SubtitleAlign</t>
+<l>NextSubtitle</l>
++      <b>3DMode</b>
+<left>StepBack</left>
+<right>StepForward</right>
+<up>BigStepForward</up>
+@@ -386,6 +387,7 @@
+<z>AspectRatio</z>
+<t>ShowSubtitles</t>
+<l>NextSubtitle</l>
++      <b>3DMode</b>
+<a>AudioDelay</a>
+<escape>Fullscreen</escape>
+<return>Select</return>
+diff --git a/system/keymaps/remote.xml b/system/keymaps/remote.xml
+index 638332e..372bbcc 100644
+--- a/system/keymaps/remote.xml
++++ b/system/keymaps/remote.xml
+@@ -157,6 +157,7 @@
+<teletext>XBMC.ActivateWindow(Teletext)</teletext>
+<subtitle>NextSubtitle</subtitle>
+<star>NextSubtitle</star>
++      <blue>3DMode</blue>
+<language>AudioNextLanguage</language>
+<playlist>Playlist</playlist>
+<hash>AudioNextLanguage</hash>
+diff --git a/xbmc/guilib/GraphicContext.h b/xbmc/guilib/GraphicContext.h
+index 5743598..a744706 100644
+--- a/xbmc/guilib/GraphicContext.h
++++ b/xbmc/guilib/GraphicContext.h
+@@ -130,6 +130,15 @@ public:
+return ((alpha << 24) & 0xff000000) | (color & 0xffffff);
+}
+
++  void setScale(float scale_x, float scale_y) {
+    +      m_guiScaleX = m_guiScaleX * scale_x;
+    +      m_guiScaleY = m_guiScaleY * scale_y;
+    +  }
++  void unsetScale(float scale_x, float scale_y) {
+    +      m_guiScaleX = m_guiScaleX / scale_x;
+    +      m_guiScaleY = m_guiScaleY / scale_y;
+    +  }
++
+void SetOrigin(float x, float y);
+void RestoreOrigin();
+void SetCameraPosition(const CPoint &camera);
+diff --git a/xbmc/guilib/Key.h b/xbmc/guilib/Key.h
+index 10aa356..9cead81 100644
+--- a/xbmc/guilib/Key.h
++++ b/xbmc/guilib/Key.h
+@@ -313,7 +313,9 @@
+#define ACTION_SUBTITLE_VSHIFT_DOWN   231 // shift down subtitles in DVDPlayer
+#define ACTION_SUBTITLE_ALIGN         232 // toggle vertical alignment of subtitles
+
+-#define ACTION_FILTER                 233
++#define ACTION_3D_MODE                233 // swich subtitles 3D mode
++
++#define ACTION_FILTER                 234
+
+// Window ID defines to make the code a bit more readable
+#define WINDOW_INVALID                     9999
+diff --git a/xbmc/input/ButtonTranslator.cpp b/xbmc/input/ButtonTranslator.cpp
+index d06db31..77a2cdf 100644
+--- a/xbmc/input/ButtonTranslator.cpp
++++ b/xbmc/input/ButtonTranslator.cpp
+@@ -76,6 +76,7 @@ static const ActionMapping actions[] =
+{"bigstepback"       , ACTION_BIG_STEP_BACK},
+{"osd"               , ACTION_SHOW_OSD},
+{"showsubtitles"     , ACTION_SHOW_SUBTITLES},
++        {"3dmode"            , ACTION_3D_MODE},
+{"nextsubtitle"      , ACTION_NEXT_SUBTITLE},
+{"codecinfo"         , ACTION_SHOW_CODEC},
+{"nextpicture"       , ACTION_NEXT_PICTURE},
+diff --git a/xbmc/settings/GUISettings.cpp b/xbmc/settings/GUISettings.cpp
+index 4464abb..d3ed255 100644
+--- a/xbmc/settings/GUISettings.cpp
++++ b/xbmc/settings/GUISettings.cpp
+@@ -799,6 +799,8 @@ void CGUISettings::Initialize()
+AddBool(sub,"subtitles.overrideassfonts", 21368, false);
+AddSeparator(sub, "subtitles.sep1");
+AddPath(sub, "subtitles.custompath", 21366, "", BUTTON_CONTROL_PATH_INPUT, false, 657);
++  AddInt(sub, "subtitles.mode3d", 13445, 0, 0, 1, 2, SPIN_CONTROL_TEXT);
++  AddInt(sub, "subtitles.mode3dparallax", 13446, 0, -50, 1, 50, SPIN_CONTROL_TEXT);
+
+map<int, int> subtitleAlignments;
+subtitleAlignments.insert(make_pair(21461, SUBTITLE_ALIGN_MANUAL));
+diff --git a/xbmc/settings/GUIWindowSettingsCategory.cpp b/xbmc/settings/GUIWindowSettingsCategory.cpp
+index 8b29c4f..9b1103e 100644
+--- a/xbmc/settings/GUIWindowSettingsCategory.cpp
++++ b/xbmc/settings/GUIWindowSettingsCategory.cpp
+@@ -398,6 +398,25 @@ void CGUIWindowSettingsCategory::CreateSettings()
+}
+pControl->SetValue(pSettingInt->GetData());
+}
++      else if (strSetting.Equals("subtitles.mode3d"))
++      {
+    +        CSettingInt *pSettingInt = (CSettingInt*)pSetting;
+    +        CGUISpinControlEx *pControl = (CGUISpinControlEx *)GetControl(GetSetting(strSetting)->GetID());
+    +        pControl->AddLabel(g_localizeStrings.Get(16018), 0);
+    +        pControl->AddLabel(g_localizeStrings.Get(13447), 1);
+    +        pControl->AddLabel(g_localizeStrings.Get(13448), 2);
+    +        pControl->SetValue(pSettingInt->GetData());
+    +      }
++      else if (strSetting.Equals("subtitles.mode3dparallax"))
++      {
+    +        for (int i = 0; i <= 100; i++)
+        +        {
+            +          CStdString dtext;
+            +          dtext.Format("%i", i-50);
+            +          pControl->AddLabel(dtext, i);
+            +        }
+    +        pControl->SetValue(pSettingInt->GetData());
+    +      }
+else if (strSetting.Equals("subtitles.color"))
+{
+    for (int i = SUBTITLE_COLOR_START; i <= SUBTITLE_COLOR_END; i++)
+        diff --git a/xbmc/settings/VideoSettings.h b/xbmc/settings/VideoSettings.h
+        index f8093b2..44ad380 100644
+        --- a/xbmc/settings/VideoSettings.h
+        +++ b/xbmc/settings/VideoSettings.h
+        @@ -116,6 +116,8 @@ public:
+        int m_SubtitleStream;
+    float m_SubtitleDelay;
+    bool m_SubtitleOn;
+    +  int m_Subtitle3DMode;
+    +  float m_Subtitle3DParallax;
+    bool m_SubtitleCached;
+    float m_Brightness;
+    float m_Contrast;
+    diff --git a/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.cpp b/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.cpp
+    index acaf595..aec7073 100644
+    --- a/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.cpp
+    +++ b/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.cpp
+    @@ -68,6 +68,8 @@ CGUIDialogAudioSubtitleSettings::~CGUIDialogAudioSubtitleSettings(void)
+#define SUBTITLE_SETTINGS_STREAM          10
+#define SUBTITLE_SETTINGS_BROWSER         11
+#define AUDIO_SETTINGS_MAKE_DEFAULT       12
+    +#define SUBTITLE_3D_ENABLE                13
+    +#define SUBTITLE_3D_PARALLAX              14
+    
+    void CGUIDialogAudioSubtitleSettings::CreateSettings()
+    {
+        @@ -102,12 +104,18 @@ void CGUIDialogAudioSubtitleSettings::CreateSettings()
+        
+        int settings[3] = { 338, 339, 420 }; //ANALOG, IEC958, HDMI
+        m_outputmode = g_guiSettings.GetInt("audiooutput.mode");
+        +  int subtitle3Dsettings[3] = { 16018, 13447, 13448 }; // None, Side By Side, Over Under
+        +  m_subtitle3DMode = g_guiSettings.GetInt("subtitles.mode3d");
+        +  m_subtitle3DParallax = g_guiSettings.GetInt("subtitles.mode3dparallax");
+        +  g_settings.m_currentVideoSettings.m_Subtitle3DParallax=m_subtitle3DParallax;
+        if (SupportsAudioFeature(IPC_AUD_SELECT_OUTPUT))
+            AddSpin(AUDIO_SETTINGS_DIGITAL_ANALOG, 337, &m_outputmode, 3, settings);
+        
+        AddSeparator(7);
+        m_subtitleVisible = g_application.m_pPlayer->GetSubtitleVisible();
+        AddBool(SUBTITLE_SETTINGS_ENABLE, 13397, &m_subtitleVisible);
+        +  AddSpin(SUBTITLE_3D_ENABLE, 13445, &g_settings.m_currentVideoSettings.m_Subtitle3DMode, 3, subtitle3Dsettings);
+        +  AddSlider(SUBTITLE_3D_PARALLAX, 13446, &g_settings.m_currentVideoSettings.m_Subtitle3DParallax, -50,  1, 50, FormatParallax, true);
+        if (SupportsSubtitleFeature(IPC_SUBS_OFFSET))
+            AddSlider(SUBTITLE_SETTINGS_DELAY, 22006, &g_settings.m_currentVideoSettings.m_SubtitleDelay, -g_advancedSettings.m_videoSubsDelayRange, 0.1f, g_advancedSettings.m_videoSubsDelayRange, FormatDelay);
+        if (SupportsSubtitleFeature(IPC_SUBS_SELECT))
+            @@ -288,6 +296,18 @@ void CGUIDialogAudioSubtitleSettings::OnSettingChanged(SettingInfo &setting)
+            g_settings.m_currentVideoSettings.m_SubtitleOn = m_subtitleVisible;
+        g_application.m_pPlayer->SetSubtitleVisible(g_settings.m_currentVideoSettings.m_SubtitleOn);
+    }
+    +  else if (setting.id == SUBTITLE_3D_ENABLE)
+        +  {
+            +    m_subtitle3DMode = g_settings.m_currentVideoSettings.m_Subtitle3DMode;
+            +    g_guiSettings.SetInt("subtitles.mode3d", m_subtitle3DMode);
+            +    g_settings.m_currentVideoSettings.m_Subtitle3DMode = m_subtitle3DMode;
+            +  }
+    +  else if (setting.id == SUBTITLE_3D_PARALLAX)
+        +  {
+            +    m_subtitle3DParallax=(int)g_settings.m_currentVideoSettings.m_Subtitle3DParallax;
+            +    g_guiSettings.SetInt("subtitles.mode3dparallax", m_subtitle3DParallax);
+            +    g_settings.m_currentVideoSettings.m_Subtitle3DParallax=m_subtitle3DParallax;
+            +  }
+    else if (setting.id == SUBTITLE_SETTINGS_DELAY)
+    {
+        g_application.m_pPlayer->SetSubTitleDelay(g_settings.m_currentVideoSettings.m_SubtitleDelay);
+        @@ -427,3 +447,10 @@ bool CGUIDialogAudioSubtitleSettings::SupportsSubtitleFeature(int feature)
+    }
+    return false;
+}
++
++CStdString CGUIDialogAudioSubtitleSettings::FormatParallax(float value, float interval)
++{
+    +  CStdString text;
+    +  text.Format(g_localizeStrings.Get(22025).c_str(), value);
+    +  return text;
+    +}
+diff --git a/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.h b/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.h
+index 5414905..96daa10 100644
+--- a/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.h
++++ b/xbmc/video/dialogs/GUIDialogAudioSubtitleSettings.h
+@@ -34,6 +34,7 @@ public:
+static CStdString PercentAsDecibel(float value, float minimum);
+static CStdString FormatDelay(float value, float minimum);
+static CStdString FormatDecibel(float value, float minimum);
++  static CStdString FormatParallax(float value, float minimum);
+
+protected:
+virtual void CreateSettings();
+@@ -49,6 +50,8 @@ protected:
+int m_subtitleStream;
+int m_outputmode;
+bool m_subtitleVisible;
++  int m_subtitle3DMode;
++  int m_subtitle3DParallax;
+Features m_audioCaps;
+Features m_subCaps;
+};
+diff --git a/xbmc/video/windows/GUIWindowFullScreen.cpp b/xbmc/video/windows/GUIWindowFullScreen.cpp
+index 0c48e28..f329343 100644
+--- a/xbmc/video/windows/GUIWindowFullScreen.cpp
++++ b/xbmc/video/windows/GUIWindowFullScreen.cpp
+@@ -239,6 +239,31 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
+return true;
+break;
+
++  case ACTION_3D_MODE:
++    {
+    +      ++g_settings.m_currentVideoSettings.m_Subtitle3DMode;
+    +      if (g_settings.m_currentVideoSettings.m_Subtitle3DMode>2)
+        +        g_settings.m_currentVideoSettings.m_Subtitle3DMode = 0;
+        +      CStdString mode;
+    +      switch (g_settings.m_currentVideoSettings.m_Subtitle3DMode) {
+            +        case 0:
+            +          mode = g_localizeStrings.Get(16018);
+            +          break;
+            +        case 1:
+            +          mode = g_localizeStrings.Get(13447);
+            +          break;
+            +        case 2:
+            +          mode = g_localizeStrings.Get(13448);
+            +          break;
+            +
+        +      }
+    +
+    +      CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info,
+                                                 +                                            g_localizeStrings.Get(13445), mode, DisplTime, false, MsgTime);
+    +    }
++    return true;
++    break;
++
+case ACTION_SHOW_INFO:
+{
+    CGUIDialogFullScreenInfo* pDialog = (CGUIDialogFullScreenInfo*)g_windowManager.GetWindow(WINDOW_DIALOG_FULLSCREEN_INFO);
+    @@ -1136,7 +1161,32 @@ void CGUIWindowFullScreen::RenderTTFSubtitles()
+    y = std::min(y, g_settings.m_ResInfo[res].Overscan.bottom - textHeight);
+}
+
++      float x1 = maxWidth * 0.25f + g_settings.m_ResInfo[res].Overscan.left * 0.5f;
++      float x2 = maxWidth * 0.75f + g_settings.m_ResInfo[res].Overscan.left * 0.5f;
++      float y1 = g_settings.m_ResInfo[res].iHeight * 0.02f;
++      float y2 = g_settings.m_ResInfo[res].iHeight * 0.52f;
++      int xp = (int)g_settings.m_currentVideoSettings.m_Subtitle3DParallax;
++
++      switch (g_settings.m_currentVideoSettings.m_Subtitle3DMode)
++     {
+        +       case 0: // none
+        m_subsLayout->RenderOutline(x, y, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth);
+        +           break;
+        +       case 1: // side by side
+        +           g_graphicsContext.setScale( 0.5 , 1.0 );
+        +           m_subsLayout->RenderOutline(x1-xp, y, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth / 2.2f);
+        +           m_subsLayout->RenderOutline(x2+xp, y, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth / 2.2f);
+        +           g_graphicsContext.unsetScale( 0.5, 1.0 );
+        +           break;
+        +       case 2: // under / over
+        +           g_graphicsContext.setScale( 1.0 , 0.5 );
+        +           m_subsLayout->RenderOutline(x-xp, y1, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth);
+        +           m_subsLayout->RenderOutline(x+xp, y2, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth);
+        +           g_graphicsContext.unsetScale( 1.0 , 0.5 );
+        +           break;
+    +     }
++
++      // m_subsLayout->RenderOutline(x, y, 0, 0xFF000000, XBFONT_CENTER_X, maxWidth);
+
+// reset rendering resolution
+    g_graphicsContext.SetRenderingResolution(m_coordsRes, m_needsScaling);
     XRRFreeScreenConfigInfo(sc);
     return(ret);
 }
